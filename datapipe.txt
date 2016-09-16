@@ -1,0 +1,86 @@
+datapipe.c is a simple program that allows a listening TCP/IP port to be
+constructed on the machine it is running on.  Any connections to that port
+will then be forwarded to the specified remote host and remote port.  This
+program can be useful for allowing your Distributed.net clients
+communicate to the outside world by running it on a gateway machine that
+has access to both the inside firewall and the outside realworld.
+
+Additionally, if you live behind a SOCKS firewall, you can compile this
+code with SOCKS support for your system and use it to act as a
+"SOCKS translator" for your Distributed.net clients.  In this case,
+datapipe doesn't even need to be run on a gateway machine.
+
+
+########################################################################################
+###################### Updates by Basile Mariano and Buono Angelo ######################
+
+datapipe.c has been improved with the functionality to relay any TCP connection, 
+received on its TCP listening socket, to a given remote host (and remote port) 
+choosen from a list of those, passed through command line while starting 
+the program.
+The idea is to move the system from a TCP/IP socket redirection application
+to a (workload) balancer.
+The remote host is choosen by an "hybrid" forwarding algorithm: for this purpose 
+datapipe keeps (now) also a counter for each server to which it relays the communication. 
+The counter keeps track of the number of active TCP connections relayed.
+Every time a client issue a connect() sys_call to datapipe, the latter is now in charge 
+of choosing to which server relay the communication. For this purpose the datapipe looks for 
+the server with the smallest number of active TCP connections.
+In case all servers are actually serving the same number of clients a Round Robin algorithm 
+is used.
+Once a client terminates its execution (after have issued a close() sys_call) or in case it 
+doesn't do I/O for an amount of time greater than a certain upper bound,IDLETIMEOUT,
+the association between that given client and the associated server is destroyed and consequently 
+the counter associated to that server is decremented. 
+
+To implement these features We've have added:
+
+1) A data structure: 		"server" to store the remote host addressing information 
+				(taken by command line) as well as the # of active TCP connections.
+			     
+2) An array: 	     		"s" of type as described above.
+	
+3) A variable: 	     		"N_SERVER"  which will contain the # of available servers to which relay.
+	
+4)Two variables:     		"index" which contains the index of the server to which relay in case 
+			    	of RR balancing and "sv_index", which instead contains the index of the server 
+			     	with smallest # of active TCP connections.
+			     	
+5) Two fields in "client_t": 	"server_index" and "direction". The first one is used to save the index  
+			        of the remote host with which communicate. 
+			        The second one is important to solve a mistake affecting the previous version,
+			        in particular: datapipe after have created the association between a given client
+			        and a server also sets the bits in the fd_set to be aware every time there's 
+			        new data either from a client or from a server. 
+			        The problem was exactly after the select() sys_call: when it returns 
+			        even if one of the involved datapipe's descriptors (either the one related to the client 
+			        or the one to the server) was not ready, the check by doing if (FD_ISSET(descriptor,..))
+			        returns true and datapipe consequently tried to read data from that socket and sends to
+				the other one, even if no data are actually available to read. 
+				According to code this sets a variable, "closeended" which is the one is checked
+				by datapipe to verify if it is required to destroy the association between a client and
+				a server.This issue highlighted when testing with the new implementation.
+				Our solution to this problem, since the communication always start from a client, 
+				was to keep track of the direction of the communication, by using this variable
+				"direction" that originally is set to 0, to indicate that the client has to talk first, 
+				and once have received data from the client and have relayed to the
+				server it is updated to 1, and then viceversa.
+			     
+6) A function:	     		"check_args()" which checks if the syntax used to start the program 
+			     	is the one specified according to the README. It also validate the 
+			     	correctness of both server's address and server's port by means of other two functions
+			     	"validate_server_address()" and "validate_server_port()".
+			     
+7) A function:	    		"init_server_sockaddr()".Once have verified the correct syntax and after have 
+			    	validated both server's address and port, of each of specified server, a call 
+			    	to this function causes the entries of the array "s" to be filled with the 
+			    	addressing info specified.
+
+8) A function:			"get_server_index()" which actually implements the hybrid forwarding algorithm.
+
+9) A function:			"print_avl_server()" that let's the user verifies how many TCP connections each server
+				is actually handling. This function is called every new association is established and
+				every time one is destroyed.
+				
+########################################################################################
+########################################################################################
