@@ -467,7 +467,7 @@ int main(int argc, char *argv[])
 				}
 
 				ret = send(clients[i].csock, buf, nbyt, 0);
-				if (ret < sizeof(buf)
+				if (ret < sizeof(buf))
 				{
 					fprintf(stderr,"\n\n./datapipe: Error send() to client: %s\n", strerror(errno));
 					closeneeded = 1;

@@ -86,7 +86,6 @@ int main(int argc, char* argv[])
 	setsockopt(listen_sock, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
 	#endif
 	
-	int avl_connections = 0;
 	/*loop*/
 	while(1)
 	{
