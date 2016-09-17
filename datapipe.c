@@ -85,7 +85,7 @@ struct client_t
 };
 
 #define MAXCLIENTS 20
-#define IDLETIMEOUT 30
+#define IDLETIMEOUT 3
 
 
 const char ident[] = "$Id: datapipe.c,v 1.8 1999/01/29 01:21:54 jlawson Exp $";
@@ -185,16 +185,16 @@ int check_args(char *argv[],int argc)
 		if(argc <= i || validate_server_address(serv_addr) == -1 )
 		{ 
 			errno = EFAULT;
-			printf("Error during address validation: %s\n\n", strerror( errno ) );
-			printf("./lz78: invalid syntax\n");
+		  fprintf(stderr,"Error during address validation: %s\n\n", strerror( errno ) );
+			fprintf(stderr,"./datapipe: invalid syntax\n");
 			help();
 			exit(EXIT_FAILURE);
 		}
 		else if(argc <= (i+1) ||  validate_server_port(argv[i+1]) == -1)
 		{ 
 			errno = EINVAL;
-			printf("Error during port validation: %s\n\n", strerror( errno ) );  
-			printf("./lz78: invalid syntax\n");
+			fprintf(stderr,"Error during port validation: %s\n\n", strerror( errno ) );  
+			fprintf(stderr,"./datapipe: invalid syntax\n");
 			help();
 			exit(EXIT_FAILURE);
 		}
@@ -229,19 +229,13 @@ void print_avl_server(struct server s[],int n_server)
 	printf("\n\n");
 }
 //============================================================================================
-
-
-
 int main(int argc, char *argv[])
 { 
 	SOCKET lsock;
 	char buf[1024];
 	struct sockaddr_in laddr;
-	
 	int ret, nbyt, closeneeded;
-
   ret= nbyt = 0;
-	
 	//============================================================================================
 	int N_SERVER;         		//# of available servers
 	uint8_t index = 0;        //index for RR scheduling
@@ -249,6 +243,10 @@ int main(int argc, char *argv[])
 	//============================================================================================
 	int i;
 	struct client_t clients[MAXCLIENTS];
+	fd_set fdsr;
+	int maxsock;
+	time_t now;
+	struct timeval tv = {1,0};
 	
 	
 	#if defined(__WIN32__) || defined(WIN32) || defined(_WIN32)
@@ -263,7 +261,7 @@ int main(int argc, char *argv[])
 	
 	if((N_SERVER = check_args(argv,argc)) == -1)
 	{
-		printf("./lz78: invalid syntax\n");
+		fprintf(stderr,"./datapipe: invalid syntax\n");
 		help();
 		exit(EXIT_FAILURE);
 	}
@@ -342,10 +340,7 @@ int main(int argc, char *argv[])
 
 	while (1)
 	{
-		fd_set fdsr;
-		int maxsock;
-		time_t now = time(NULL);
-		
+		now = time(NULL);
 		/* build the list of sockets to check. */
 		
 		FD_ZERO(&fdsr);
@@ -363,7 +358,7 @@ int main(int argc, char *argv[])
 					maxsock = (int) clients[i].osock;
 			}
 			    
-		if (select(maxsock + 1, &fdsr, NULL, NULL, NULL) < 0)
+		if (select(maxsock + 1, &fdsr, NULL, NULL, &tv) < 0)
 			return 30;
 
 		/* check if there are new connections to accept. */
@@ -409,7 +404,7 @@ int main(int argc, char *argv[])
 					index = ((index+1)%N_SERVER);
 					/*incrementing the server connection counter*/
 					s[sv_index].connection++;
-
+					/*print server status */
           print_avl_server(s,N_SERVER);
 				}
 			} 
@@ -419,8 +414,7 @@ int main(int argc, char *argv[])
 				closesocket(csock);
 			}
 		}
-	
-//============================================================================================
+
 		/* service any client connections that have waiting data. */
 		for (i = 0; i < MAXCLIENTS; i++)
 		{
@@ -429,42 +423,58 @@ int main(int argc, char *argv[])
 			{
 				continue;
 			}
+			//============================================================================================
 			if (FD_ISSET(clients[i].csock, &fdsr) && clients[i].direction == 0)
 			{
-				nbyt = recv(clients[i].csock, buf, sizeof(buf), 0);
-				if (nbyt == -1)
+				nbyt = recv(clients[i].csock, buf, sizeof(buf), MSG_WAITALL);
+				if (nbyt < sizeof(buf) && nbyt !=0) 
 				{
-					printf("\n\nError recv() from client: %s\n", strerror(errno));
+					fprintf(stderr,"\n./datapipe: Error recv() from client: %s\n", strerror(errno));
 					closeneeded = 1;
-				}	
+					goto remove_client;
+				} else if(nbyt == 0) {
+					fprintf(stderr,"\n:./datapipe: Remote client closed the connection\n");
+					closeneeded = 1;
+					goto remove_client;
+				}		
+
 				ret = send(clients[i].osock, buf, nbyt, 0);
-				if (ret == -1)
+				if (ret < sizeof(buf))
 				{
-					printf("\n\nError send() to server: %s\n", strerror(errno));
+					fprintf(stderr,"\n./datapipe: Error send() to server: %s\n", strerror(errno));
 					closeneeded = 1;
+					goto remove_client;
 				}
-				if (nbyt != -1 && ret != -1)
-					clients[i].activity = now;
+
+				clients[i].activity = now;
 				/*updating the communication direction*/	
 				clients[i].direction = 1;
 				goto timeout;
-			} 
+			}
+
 			if (FD_ISSET(clients[i].osock, &fdsr) && clients[i].direction == 1)
 			{
-				nbyt = recv(clients[i].osock, buf, sizeof(buf), 0);
-				if (nbyt == -1)
+				nbyt = recv(clients[i].osock, buf, sizeof(buf), MSG_WAITALL);
+				if (nbyt < sizeof(buf) && nbyt !=0)
 				{
-					printf("\n\nError recv() from server: %s\n", strerror(errno));
+					fprintf(stderr,"\n./datapipe: Error recv() from server: %s\n", strerror(errno));
 					closeneeded = 1;
-				}	
-				ret = send(clients[i].csock, buf, nbyt, 0);
-				if (ret == -1)
-				{
-					printf("\n\nError send() to client: %s\n", strerror(errno));
+					goto remove_client;
+				} else if(nbyt == 0) {
+					fprintf(stderr,"\n:./datapipe: Remote server closed the connection\n");
 					closeneeded = 1;
+					goto remove_client;
 				}
-				if (nbyt != -1 && ret != -1)
-					clients[i].activity = now;
+
+				ret = send(clients[i].csock, buf, nbyt, 0);
+				if (ret < sizeof(buf)
+				{
+					fprintf(stderr,"\n\n./datapipe: Error send() to client: %s\n", strerror(errno));
+					closeneeded = 1;
+					goto remove_client;
+				}
+
+				clients[i].activity = now;
 				/*updating the communication direction*/	
 				clients[i].direction = 0;
 			}
@@ -473,8 +483,12 @@ timeout:
 
 			if (now - clients[i].activity > IDLETIMEOUT)
 			{
+				printf("./datapipe: TIMEOUT\n");
 				closeneeded = 1;
 			}
+
+remove_client:
+
 			if (closeneeded)
 			{
 				closesocket(clients[i].csock);
@@ -484,12 +498,12 @@ timeout:
 				/*decrementing the server connection counter*/
         clients[i].direction = 0;
 				s[clients[i].server_index].connection--;
-				 print_avl_server(s,N_SERVER);
+				/*print server status */
+				print_avl_server(s,N_SERVER);
 			}      
 		}//end for
 	}//end while
-//============================================================================================
-	
+	//============================================================================================
 	return 0;
 }
 

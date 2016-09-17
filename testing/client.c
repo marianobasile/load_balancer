@@ -75,6 +75,11 @@ int main(int argc, char * argv[]) {
 	char tcpBuffer[DIM_TCP_MSG];
  	struct sockaddr_in server_addr;  
  	int ret, nbytes, len,i;
+  char serv_addr[INET_ADDRSTRLEN];
+
+  //since strtok modifies argv[]
+  strcpy(serv_addr,argv[1]);
+
  	
  	/*Argc size check */
 	check_argc_size(argc);
@@ -113,42 +118,28 @@ int main(int argc, char * argv[]) {
       close(tcpSocket);
       exit(EXIT_FAILURE);
     }
-    printf("\nConnessione al server %s (porta: %d) effettuata con successo: %d",argv[1],atoi(argv[2]),i);
+    printf("\nConnessione al server %s (porta: %d) effettuata con successo: %d",serv_addr,atoi(argv[2]),i);
     printf("\n");
 
-    bzero(tcpBuffer,DIM_TCP_MSG);
+    bzero(&tcpBuffer,DIM_TCP_MSG);
     strcpy(tcpBuffer,"MESSAGGIO DAL CLIENT");
-    len = strlen(tcpBuffer)+1;
+    len = sizeof(tcpBuffer);
 
     if( (nbytes = write(tcpSocket,tcpBuffer,len)) != len)
     {
       printf("Error while performing WRITE(): %s\n", strerror( errno ) );  
-        close(tcpSocket);
+      close(tcpSocket);
       exit(EXIT_FAILURE);
     }   
-
-//sleep(1);
 
     if( (nbytes = recv(tcpSocket,tcpBuffer,len,MSG_WAITALL)) != len)
     {
       printf("Error while performing RECV(): %s\n", strerror( errno ) );  
-        close(tcpSocket);
+      close(tcpSocket);
       exit(EXIT_FAILURE);
     } 
-
-    bzero(tcpBuffer,DIM_TCP_MSG);
-    strcpy(tcpBuffer,"MESSAGGIO DAL CLIENT");
-    len = strlen(tcpBuffer)+1;
-/*
-    if( (nbytes = write(tcpSocket,tcpBuffer,len)) != len)
-    {
-      printf("Error while performing WRITE(): %s\n", strerror( errno ) );  
-        close(tcpSocket);
-      exit(EXIT_FAILURE);
-    }   
-*/
+    
     close(tcpSocket);
-
   }
   
   return 0;

@@ -1,8 +1,13 @@
 # BALANCER
+Description:  Datapipe, a simple TCP/IP socket redirection application, has been extended for the purpose of implementing
+              a workload balancer.
+              
+# Build
+Make
 
-# Description:
-This is a simple TCP/IP socket redirection application that offers a
-little more complexity than the simple fork-based datapipes that are
-commonly available. This source has been successfully compiled and
-used on Linux, FreeBSD, and Win32. I have released it into the
-public-domain. 
+#Usage
+./datapipe LOCAL_ADDR LOCAL_PORT SERVER_ADDR1 SERVER_PORT1 SERVER_ADDRN SERVER_PORTN
+
+#Example
+./datapipe 127.0.0.1 1233 127.0.0.1 1234 127.0.0.1 1235 127.0.0.1 1236
+
