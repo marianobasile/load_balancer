@@ -85,7 +85,7 @@ struct client_t
 };
 
 #define MAXCLIENTS 20
-#define IDLETIMEOUT 3
+#define IDLETIMEOUT 30
 
 
 const char ident[] = "$Id: datapipe.c,v 1.8 1999/01/29 01:21:54 jlawson Exp $";
